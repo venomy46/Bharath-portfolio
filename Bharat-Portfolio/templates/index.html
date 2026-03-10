@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bharat Portfolio — AI Stock Tracker 🇮🇳</title>
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+/* ── Design Tokens ─────────────────────────────────────── */
+:root {
+  --bg:       #04070f;
+  --saffron:  #FF9933;   /* Indian flag saffron */
+  --green:    #138808;   /* Indian flag green */
+  --green2:   #00e676;   /* Neon green for profit */
+  --red:      #ff4c6a;
+  --white:    #f5f5f5;
+  --blue:     #3b82f6;
+  --gold:     #fbbf24;
+  --text:     #eef0f8;
+  --sub:      #8899bb;
+  --glass:    rgba(255,255,255,.04);
+  --glass2:   rgba(255,255,255,.07);
+  --border:   rgba(255,255,255,.09);
+  --body:     'Outfit', sans-serif;
+  --mono:     'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100vh; }
+
+body {
+  font-family: var(--body);
+  background: var(--bg);
+  color: var(--text);
+  overflow-x: hidden;
+}
+
+/* ── Animated Background ─────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: -1;
+  background:
+    radial-gradient(ellipse 70% 55% at 0% 0%,    rgba(255,153,51,.10) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 100% 100%, rgba(19,136,8,.09)   0%, transparent 55%),
+    radial-gradient(ellipse 40% 35% at 50% 50%,   rgba(59,130,246,.05) 0%, transparent 60%),
+    var(--bg);
+}
+
+/* ── Floating Blobs ──────────────────────────────────── */
+.blob {
+  position: fixed; border-radius: 50%; pointer-events: none;
+  filter: blur(100px); opacity: .18; z-index: 0;
+  animation: blobDrift 20s ease-in-out infinite alternate;
+}
+.blob1 { width: 500px; height: 500px; background: var(--saffron); top: -150px; left: -150px; animation-duration: 22s; }
+.blob2 { width: 450px; height: 450px; background: var(--green);   bottom: -120px; right: -120px; animation-duration: 18s; animation-delay: -8s; }
+@keyframes blobDrift {
+  0%   { transform: translate(0,0) scale(1); }
+  50%  { transform: translate(40px,-30px) scale(1.06); }
+  100% { transform: translate(-20px, 25px) scale(.94); }
+}
+
+/* ── Everything above bg ─────────────────────────────── */
+#app { position: relative; z-index: 1; min-height: 100vh; }
+
+/* ── Glassmorphism Utility ───────────────────────────── */
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border: 1px solid var(--border);
+  border-top-color: rgba(255,255,255,.14);
+  border-left-color: rgba(255,255,255,.10);
+  box-shadow: 0 8px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.glass-strong {
+  background: var(--glass2);
+  backdrop-filter: blur(36px) saturate(2);
+  -webkit-backdrop-filter: blur(36px) saturate(2);
+  border: 1px solid rgba(255,255,255,.12);
+  border-top-color: rgba(255,255,255,.22);
+  box-shadow: 0 12px 50px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.1);
+}
+
+/* ── Scrollbar ────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-thumb { background: rgba(255,153,51,.35); border-radius: 4px; }
+
+/* ════════════════════════════════════════════════════════
+   HEADER
+═══════════════════════════════════════════════════════════ */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 28px;
+  background: rgba(4,7,15,.55);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  position: sticky; top: 0; z-index: 30;
+}
+header::after {
+  content: '';
+  position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--saffron) 30%, white 50%, var(--green) 70%, transparent);
+  background-size: 200% 100%;
+  animation: flagLine 5s linear infinite;
+}
+@keyframes flagLine { to { background-position: -200% 0; } }
+
+.logo { display: flex; align-items: center; gap: 12px; }
+.logo-icon {
+  width: 38px; height: 38px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--saffron), #e85d04);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 0 18px rgba(255,153,51,.35), inset 0 1px 0 rgba(255,255,255,.2);
+}
+.logo-text h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: -.3px; }
+.logo-text p  { font-size: .68rem; color: var(--sub); font-weight: 400; letter-spacing: .5px; }
+
+.header-right { display: flex; align-items: center; gap: 12px; }
+.live-pill {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 12px; border-radius: 20px;
+  background: rgba(19,136,8,.12); border: 1px solid rgba(19,136,8,.3);
+  font-size: .72rem; color: #4caf50; font-weight: 600;
+}
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #4caf50; animation: pulse 1.5s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(1.35)} }
+#last-upd { font-size: .7rem; color: var(--sub); }
+
+/* ════════════════════════════════════════════════════════
+   METRIC CARDS
+═══════════════════════════════════════════════════════════ */
+.metrics {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 14px; padding: 20px 28px;
+}
+.metric {
+  border-radius: 18px; padding: 18px 20px;
+  position: relative; overflow: hidden;
+  transition: transform .2s;
+}
+.metric:hover { transform: translateY(-3px); }
+.metric::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,153,51,.07) 0%, rgba(19,136,8,.04) 100%);
+}
+.metric-icon { font-size: 1.3rem; margin-bottom: 8px; }
+.metric-label { font-size: .66rem; text-transform: uppercase; letter-spacing: 1px; color: var(--sub); }
+.metric-val   { font-family: var(--mono); font-size: 1.5rem; font-weight: 700; margin-top: 5px; }
+.metric-sub   { font-size: .75rem; margin-top: 3px; color: var(--sub); }
+
+/* ════════════════════════════════════════════════════════
+   MAIN LAYOUT
+═══════════════════════════════════════════════════════════ */
+.main-grid {
+  display: grid; grid-template-columns: 1fr 320px;
+  gap: 18px; padding: 0 28px 28px;
+}
+.left-col  { display: flex; flex-direction: column; gap: 18px; }
+.right-col { display: flex; flex-direction: column; gap: 18px; }
+
+.card { border-radius: 20px; padding: 22px; }
+.card-title {
+  font-size: .85rem; font-weight: 700;
+  letter-spacing: .3px; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* ════════════════════════════════════════════════════════
+   CHART
+═══════════════════════════════════════════════════════════ */
+.chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.chart-tabs   { display: flex; gap: 6px; flex-wrap: wrap; }
+.chart-tab {
+  padding: 4px 12px; border-radius: 8px; font-size: .74rem;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--sub); cursor: pointer; font-family: var(--body);
+  transition: all .2s;
+}
+.chart-tab.active, .chart-tab:hover {
+  background: rgba(255,153,51,.15); color: var(--saffron); border-color: rgba(255,153,51,.4);
+}
+
+/* ════════════════════════════════════════════════════════
+   HOLDINGS TABLE
+═══════════════════════════════════════════════════════════ */
+table { width: 100%; border-collapse: collapse; }
+th {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .8px;
+  color: var(--sub); padding: 10px 12px; text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+td {
+  padding: 13px 12px; border-bottom: 1px solid rgba(255,255,255,.03);
+  font-size: .85rem; font-family: var(--mono);
+}
+tbody tr { transition: background .15s; cursor: pointer; }
+tbody tr:hover   { background: rgba(255,153,51,.05); }
+tbody tr.selected{ background: rgba(255,153,51,.1) !important; }
+
+.stock-chip { display: flex; align-items: center; gap: 10px; }
+.avatar {
+  width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800; color: white;
+  font-family: var(--body);
+}
+.stock-name { font-family: var(--body); font-size: .8rem; font-weight: 600; }
+.stock-sub  { font-family: var(--body); font-size: .68rem; color: var(--sub); }
+
+.up   { color: var(--green2); }
+.down { color: var(--red);    }
+
+.del-btn {
+  background: rgba(255,76,106,.08); border: 1px solid rgba(255,76,106,.2);
+  color: var(--red); border-radius: 7px; padding: 4px 9px;
+  cursor: pointer; font-size: .74rem; font-family: var(--body);
+  transition: all .2s;
+}
+.del-btn:hover { background: rgba(255,76,106,.2); }
+
+/* Skeleton */
+.skeleton { animation: shimmer 1.5s infinite; border-radius: 6px; }
+@keyframes shimmer { 0%,100%{background:rgba(255,255,255,.04)} 50%{background:rgba(255,255,255,.09)} }
+
+/* Remove animation */
+@keyframes fadeOut { to { opacity: 0; transform: translateX(30px); } }
+.removing { animation: fadeOut .35s forwards; }
+
+/* ════════════════════════════════════════════════════════
+   ADD STOCK FORM
+═══════════════════════════════════════════════════════════ */
+.form-field { margin-bottom: 12px; position: relative; }
+.form-field label {
+  display: block; font-size: .66rem; text-transform: uppercase;
+  letter-spacing: .8px; color: var(--sub); margin-bottom: 5px;
+}
+.form-field input {
+  width: 100%; padding: 10px 13px;
+  background: rgba(255,255,255,.05); border: 1px solid var(--border);
+  border-radius: 11px; color: var(--text); font-size: .85rem;
+  font-family: var(--body); outline: none; transition: border-color .2s, box-shadow .2s;
+}
+.form-field input:focus {
+  border-color: rgba(255,153,51,.5);
+  box-shadow: 0 0 0 3px rgba(255,153,51,.12);
+}
+.form-field input::placeholder { color: rgba(255,255,255,.25); }
+
+.ac-box {
+  position: absolute; left: 0; right: 0; top: 100%; z-index: 50;
+  background: #0b0f1e; border: 1px solid var(--border);
+  border-radius: 12px; max-height: 170px; overflow-y: auto;
+  display: none; margin-top: 4px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.6);
+}
+.ac-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 13px; cursor: pointer; transition: background .15s;
+  font-size: .83rem;
+}
+.ac-item:hover { background: rgba(255,153,51,.1); }
+.ac-sym  { font-weight: 700; color: var(--saffron); width: 80px; flex-shrink: 0; font-size: .8rem; }
+.ac-name { color: var(--sub); font-size: .76rem; }
+
+.cost-preview {
+  background: rgba(255,153,51,.07); border: 1px solid rgba(255,153,51,.2);
+  border-radius: 10px; padding: 9px 13px; margin-bottom: 12px;
+  font-size: .8rem; color: var(--sub); display: none;
+}
+.cost-preview span { color: var(--saffron); font-weight: 700; font-family: var(--mono); }
+
+.add-btn {
+  width: 100%; padding: 12px;
+  background: linear-gradient(135deg, var(--saffron), #e85d04);
+  border: none; border-radius: 12px; color: white;
+  font-size: .88rem; font-weight: 700; cursor: pointer;
+  font-family: var(--body); letter-spacing: .3px;
+  transition: all .22s;
+  box-shadow: 0 4px 20px rgba(255,153,51,.25);
+}
+.add-btn:hover { opacity: .92; transform: translateY(-1px); box-shadow: 0 0 28px rgba(255,153,51,.35); }
+
+/* ════════════════════════════════════════════════════════
+   AI PANEL
+═══════════════════════════════════════════════════════════ */
+.ai-orb {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--saffron), #e85d04);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; flex-shrink: 0;
+  animation: orbPulse 3s ease-in-out infinite;
+}
+@keyframes orbPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(255,153,51,.4); }
+  50%      { box-shadow: 0 0 0 10px rgba(255,153,51, 0); }
+}
+.ai-idle { text-align: center; padding: 28px 12px; color: var(--sub); font-size: .84rem; }
+.ai-idle span { display: block; font-size: 2rem; margin-bottom: 10px; opacity: .5; }
+
+.spinner {
+  width: 30px; height: 30px; border: 3px solid var(--border);
+  border-top-color: var(--saffron); border-radius: 50%;
+  animation: spin .7s linear infinite; margin: 0 auto 10px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.ai-result { animation: slideUp .3s ease; }
+@keyframes slideUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+
+.signal-badge {
+  display: inline-block; padding: 4px 14px; border-radius: 20px;
+  font-size: .8rem; font-weight: 700; letter-spacing: .5px; margin-bottom: 10px;
+}
+.ai-headline { font-size: .84rem; line-height: 1.55; margin-bottom: 12px; color: var(--text); }
+.ai-bullets { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+.ai-bullets li {
+  font-size: .78rem; color: var(--sub);
+  padding: 7px 11px; border-radius: 9px;
+  background: rgba(255,255,255,.04);
+  border-left: 2px solid var(--saffron);
+  line-height: 1.45;
+}
+
+/* ════════════════════════════════════════════════════════
+   TOASTS
+═══════════════════════════════════════════════════════════ */
+#toast-wrap {
+  position: fixed; bottom: 24px; right: 24px;
+  display: flex; flex-direction: column; gap: 8px; z-index: 999;
+}
+.toast {
+  padding: 12px 18px; border-radius: 13px;
+  background: rgba(10,15,30,.9); border: 1px solid var(--border);
+  backdrop-filter: blur(16px);
+  font-size: .84rem; display: flex; align-items: center; gap: 9px;
+  animation: toastIn .3s ease; min-width: 220px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.4);
+}
+@keyframes toastIn  { from { opacity: 0; transform: translateX(30px); } }
+@keyframes toastOut { to   { opacity: 0; transform: translateX(30px); } }
+
+/* ════════════════════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════════════════════ */
+@media (max-width: 1060px) { .main-grid { grid-template-columns: 1fr; } .metrics { grid-template-columns: repeat(2,1fr); } }
+@media (max-width:  600px) { header { padding: 12px 16px; } .metrics { padding: 14px 16px; } .main-grid { padding: 0 16px 20px; } }
+</style>
+</head>
+<body>
+
+<!-- Background blobs -->
+<div class="blob blob1"></div>
+<div class="blob blob2"></div>
+
+<div id="app">
+
+<!-- ════ HEADER ═══════════════════════════════════════════ -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🇮🇳</div>
+    <div class="logo-text">
+      <h1>Bharat Portfolio</h1>
+      <p>AI-Powered Indian Stock Tracker</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <span id="last-upd"></span>
+    <div class="live-pill"><div class="live-dot"></div>NSE Live</div>
+  </div>
+</header>
+
+<!-- ════ METRICS ══════════════════════════════════════════ -->
+<div class="metrics">
+  <div class="metric glass">
+    <div class="metric-icon">💰</div>
+    <div class="metric-label">Total Invested</div>
+    <div class="metric-val" id="m-invested">–</div>
+    <div class="metric-sub">Cost basis</div>
+  </div>
+  <div class="metric glass">
+    <div class="metric-icon">📈</div>
+    <div class="metric-label">Current Value</div>
+    <div class="metric-val" id="m-current">–</div>
+    <div class="metric-sub">Market value</div>
+  </div>
+  <div class="metric glass">
+    <div class="metric-icon">🏦</div>
+    <div class="metric-label">Total P&amp;L</div>
+    <div class="metric-val" id="m-pnl">–</div>
+    <div class="metric-sub" id="m-pct">–</div>
+  </div>
+  <div class="metric glass">
+    <div class="metric-icon">💼</div>
+    <div class="metric-label">Holdings</div>
+    <div class="metric-val" id="m-count">–</div>
+    <div class="metric-sub">Stocks tracked</div>
+  </div>
+</div>
+
+<!-- ════ MAIN GRID ════════════════════════════════════════ -->
+<div class="main-grid">
+
+  <!-- LEFT -->
+  <div class="left-col">
+
+    <!-- Chart -->
+    <div class="card glass">
+      <div class="chart-header">
+        <div class="card-title">📊 Portfolio Chart</div>
+        <div class="chart-tabs" id="chart-tabs">
+          <button class="chart-tab active" data-sym="ALL">Overview</button>
+        </div>
+      </div>
+      <canvas id="valueChart" height="130"></canvas>
+    </div>
+
+    <!-- Holdings -->
+    <div class="card glass">
+      <div class="card-title">
+        💼 My Holdings
+        <span style="font-size:.7rem;color:var(--sub);font-weight:400;margin-left:auto;">Click a row for AI insight</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Stock</th>
+            <th>Qty</th>
+            <th>Buy ₹</th>
+            <th>Live ₹</th>
+            <th>Invested</th>
+            <th>Current</th>
+            <th>P&amp;L</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbl-body">
+          <tr id="sk1"><td colspan="8"><div class="skeleton" style="height:18px;width:100%;"></div></td></tr>
+          <tr id="sk2"><td colspan="8"><div class="skeleton" style="height:18px;width:75%;"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right-col">
+
+    <!-- Add Stock -->
+    <div class="card glass-strong">
+      <div class="card-title">➕ Add Stock</div>
+      <form id="add-form" method="POST" action="/" onsubmit="return validateForm()">
+        <div class="form-field">
+          <label>NSE / BSE Symbol</label>
+          <input id="sym-inp" name="symbol" placeholder="e.g. RELIANCE.NS" autocomplete="off">
+          <div class="ac-box" id="ac-box"></div>
+        </div>
+        <div class="form-field">
+          <label>Quantity (Shares)</label>
+          <input id="qty-inp" name="quantity" type="number" min="1" placeholder="Number of shares">
+        </div>
+        <div class="form-field">
+          <label>Buy Price (₹)</label>
+          <input id="buy-inp" name="buy_price" type="number" step="0.01" min="0.01" placeholder="Price per share in ₹">
+        </div>
+        <div class="cost-preview" id="cost-prev">
+          Total cost: <span id="cost-val">₹0</span>
+        </div>
+        <button class="add-btn" type="submit">Add to Portfolio</button>
+        <p id="form-err" style="color:var(--red);font-size:.78rem;margin-top:8px;"></p>
+      </form>
+    </div>
+
+    <!-- AI Analyst -->
+    <div class="card glass">
+      <div style="display:flex;align-items:center;gap:11px;margin-bottom:14px;">
+        <div class="ai-orb">🤖</div>
+        <div>
+          <div style="font-size:.88rem;font-weight:700;">AI Analyst</div>
+          <div style="font-size:.68rem;color:var(--sub);">RSI · SMA · Volume</div>
+        </div>
+      </div>
+      <div id="ai-content">
+        <div class="ai-idle">
+          <span>📊</span>
+          Click any stock row to get AI-generated buy/sell/hold insight.
+        </div>
+      </div>
+    </div>
+
+    <!-- Allocation -->
+    <div class="card glass" style="min-height:210px;">
+      <div class="card-title">🥧 Allocation</div>
+      <canvas id="pieChart" height="155"></canvas>
+    </div>
+
+  </div>
+</div>
+</div><!-- #app -->
+
+<div id="toast-wrap"></div>
+
+<!-- ════════════════════════════════════════════════════════
+     JAVASCRIPT
+═══════════════════════════════════════════════════════════ -->
+<script>
+/* ── Indian Stock Catalogue (NSE) ──────────────────────── */
+const STOCKS = [
+  {s:"RELIANCE.NS",  n:"Reliance Industries"},
+  {s:"TCS.NS",       n:"Tata Consultancy Services"},
+  {s:"HDFCBANK.NS",  n:"HDFC Bank"},
+  {s:"INFY.NS",      n:"Infosys"},
+  {s:"ICICIBANK.NS", n:"ICICI Bank"},
+  {s:"HINDUNILVR.NS",n:"Hindustan Unilever"},
+  {s:"SBIN.NS",      n:"State Bank of India"},
+  {s:"BAJFINANCE.NS",n:"Bajaj Finance"},
+  {s:"BHARTIARTL.NS",n:"Bharti Airtel"},
+  {s:"WIPRO.NS",     n:"Wipro"},
+  {s:"HCLTECH.NS",   n:"HCL Technologies"},
+  {s:"ASIANPAINT.NS",n:"Asian Paints"},
+  {s:"KOTAKBANK.NS", n:"Kotak Mahindra Bank"},
+  {s:"LT.NS",        n:"Larsen & Toubro"},
+  {s:"AXISBANK.NS",  n:"Axis Bank"},
+  {s:"MARUTI.NS",    n:"Maruti Suzuki"},
+  {s:"SUNPHARMA.NS", n:"Sun Pharmaceutical"},
+  {s:"TITAN.NS",     n:"Titan Company"},
+  {s:"ULTRACEMCO.NS",n:"UltraTech Cement"},
+  {s:"NESTLEIND.NS", n:"Nestle India"},
+  {s:"POWERGRID.NS", n:"Power Grid Corporation"},
+  {s:"NTPC.NS",      n:"NTPC"},
+  {s:"ONGC.NS",      n:"ONGC"},
+  {s:"ADANIENT.NS",  n:"Adani Enterprises"},
+  {s:"TATAMOTORS.NS",n:"Tata Motors"},
+  {s:"TECHM.NS",     n:"Tech Mahindra"},
+  {s:"M&M.NS",       n:"Mahindra & Mahindra"},
+  {s:"DRREDDY.NS",   n:"Dr. Reddy's Laboratories"},
+  {s:"BAJAJFINSV.NS",n:"Bajaj Finserv"},
+  {s:"ITC.NS",       n:"ITC Limited"},
+];
+
+/* ── INR Currency Format ───────────────────────────────── */
+function inr(n, decimals = 2) {
+  if (isNaN(n)) return '₹–';
+  return '₹' + Number(n).toLocaleString('en-IN', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
+/* ── Autocomplete ──────────────────────────────────────── */
+const symInp = document.getElementById('sym-inp');
+const acBox  = document.getElementById('ac-box');
+
+symInp.addEventListener('input', () => {
+  const q = symInp.value.toUpperCase();
+  if (!q) { acBox.style.display = 'none'; return; }
+  const hits = STOCKS.filter(x => x.s.toUpperCase().includes(q) || x.n.toUpperCase().includes(q));
+  acBox.innerHTML = hits.slice(0, 8).map(x =>
+    `<div class="ac-item" onclick="pick('${x.s}')">
+       <span class="ac-sym">${x.s.replace('.NS','')}</span>
+       <span class="ac-name">${x.n}</span>
+     </div>`
+  ).join('');
+  acBox.style.display = hits.length ? 'block' : 'none';
+});
+document.addEventListener('click', e => {
+  if (!acBox.contains(e.target) && e.target !== symInp) acBox.style.display = 'none';
+});
+function pick(sym) { symInp.value = sym; acBox.style.display = 'none'; symInp.focus(); }
+
+/* ── Cost Preview ──────────────────────────────────────── */
+const qtyInp   = document.getElementById('qty-inp');
+const buyInp   = document.getElementById('buy-inp');
+const prevEl   = document.getElementById('cost-prev');
+const costEl   = document.getElementById('cost-val');
+
+function updatePreview() {
+  const q = parseFloat(qtyInp.value), b = parseFloat(buyInp.value);
+  if (q > 0 && b > 0) { costEl.textContent = inr(q * b); prevEl.style.display = 'block'; }
+  else prevEl.style.display = 'none';
+}
+qtyInp.addEventListener('input', updatePreview);
+buyInp.addEventListener('input', updatePreview);
+
+/* ── Form Validation ───────────────────────────────────── */
+function validateForm() {
+  const err = document.getElementById('form-err');
+  const sym = symInp.value.trim();
+  const qty = parseFloat(qtyInp.value);
+  const buy = parseFloat(buyInp.value);
+  err.textContent = '';
+  if (!sym)      { err.textContent = '⚠ Enter a stock symbol.'; return false; }
+  if (!(qty > 0)){ err.textContent = '⚠ Quantity must be > 0.'; return false; }
+  if (!(buy > 0)){ err.textContent = '⚠ Buy price must be > 0.'; return false; }
+  toast('✅', `Adding ${sym}…`, 'var(--green2)');
+  return true;
+}
+
+/* ── Charts ────────────────────────────────────────────── */
+const PALETTE = ['#FF9933','#138808','#3b82f6','#fbbf24','#f97316','#06b6d4','#a855f7','#10b981','#f43f5e','#84cc16'];
+
+const lineChart = new Chart(document.getElementById('valueChart').getContext('2d'), {
+  type: 'line',
+  data: { labels: [], datasets: [] },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { labels: { color: '#8899bb', font: { size: 11, family: 'Outfit' } } },
+      tooltip: {
+        backgroundColor: '#0a0f1e',
+        borderColor: 'rgba(255,153,51,.3)', borderWidth: 1,
+        titleColor: '#eef0f8', bodyColor: '#8899bb',
+        callbacks: { label: c => ` ${c.dataset.label}: ${inr(c.parsed.y)}` }
+      }
+    },
+    scales: {
+      x: { ticks: { color:'#8899bb', font:{size:10} }, grid: { color:'rgba(255,255,255,.03)' } },
+      y: { ticks: { color:'#8899bb', font:{size:10}, callback: v => inr(v, 0) }, grid: { color:'rgba(255,255,255,.03)' } }
+    }
+  }
+});
+
+const pieChart = new Chart(document.getElementById('pieChart').getContext('2d'), {
+  type: 'doughnut',
+  data: {
+    labels: [],
+    datasets: [{ data: [], backgroundColor: [], borderWidth: 2, borderColor: '#04070f' }]
+  },
+  options: {
+    cutout: '70%',
+    plugins: {
+      legend: { position: 'right', labels: { color:'#8899bb', font:{size:11,family:'Outfit'}, boxWidth:10, padding:8 } },
+      tooltip: { callbacks: { label: c => ` ${c.label}: ${inr(c.parsed)}` } }
+    }
+  }
+});
+
+/* ── SocketIO ───────────────────────────────────────────── */
+const socket = io();
+let portfolio = [], activeSym = 'ALL', selectedSym = null;
+
+socket.on('price_update', data => {
+  portfolio = data.stocks || [];
+
+  // Clear skeletons
+  ['sk1','sk2'].forEach(id => { const el = document.getElementById(id); if(el) el.remove(); });
+
+  // Metrics — show in INR
+  document.getElementById('m-invested').textContent = inr(data.total_invested || 0);
+  document.getElementById('m-current').textContent  = inr(data.total_current  || 0);
+  const pnl = data.total_pnl || 0;
+  const pnlEl = document.getElementById('m-pnl');
+  pnlEl.textContent   = (pnl >= 0 ? '+' : '') + inr(pnl);
+  pnlEl.style.color   = pnl >= 0 ? 'var(--green2)' : 'var(--red)';
+  const pctEl = document.getElementById('m-pct');
+  pctEl.textContent   = (data.total_pct >= 0 ? '▲ +' : '▼ ') + (data.total_pct || 0).toFixed(2) + '%';
+  pctEl.style.color   = pnl >= 0 ? 'var(--green2)' : 'var(--red)';
+  document.getElementById('m-count').textContent    = portfolio.length;
+  document.getElementById('last-upd').textContent   = data.timestamp || '';
+
+  renderTable(portfolio);
+  renderPie(portfolio);
+  updateTabs(portfolio);
+});
+
+/* ── Table ─────────────────────────────────────────────── */
+function renderTable(stocks) {
+  const tbody = document.getElementById('tbl-body');
+  const existing = {};
+  tbody.querySelectorAll('tr[data-sym]').forEach(r => existing[r.dataset.sym] = r);
+  const seen = new Set();
+
+  stocks.forEach((r, i) => {
+    seen.add(r.symbol);
+    const up = r.profit >= 0;
+    // Display clean symbol (strip .NS / .BO)
+    const dispSym = r.symbol.replace(/\.(NS|BO)$/i, '');
+    const html = `
+      <td>
+        <div class="stock-chip">
+          <div class="avatar" style="background:linear-gradient(135deg,${PALETTE[i%PALETTE.length]},${PALETTE[(i+1)%PALETTE.length]})">
+            ${dispSym.substring(0,2)}
+          </div>
+          <div>
+            <div class="stock-name">${dispSym}</div>
+            <div class="stock-sub">${r.qty} shares</div>
+          </div>
+        </div>
+      </td>
+      <td>${r.qty}</td>
+      <td>${inr(r.buy_price)}</td>
+      <td>${inr(r.live_price)}</td>
+      <td>${inr(r.invested)}</td>
+      <td>${inr(r.current)}</td>
+      <td class="${up ? 'up' : 'down'}">
+        ${up ? '▲ +' : '▼ '}${inr(r.profit)} (${r.percent}%)
+      </td>
+      <td><button class="del-btn" onclick="removeStock('${r.symbol}',event)">✕</button></td>`;
+
+    if (existing[r.symbol]) {
+      existing[r.symbol].innerHTML = html;
+    } else {
+      const row = document.createElement('tr');
+      row.dataset.sym = r.symbol;
+      row.innerHTML   = html;
+      row.addEventListener('click', e => {
+        if (e.target.classList.contains('del-btn')) return;
+        document.querySelectorAll('#tbl-body tr').forEach(x => x.classList.remove('selected'));
+        row.classList.add('selected');
+        selectedSym = r.symbol;
+        fetchAI(r.symbol);
+      });
+      tbody.appendChild(row);
+    }
+  });
+  Object.keys(existing).forEach(sym => { if (!seen.has(sym)) existing[sym].remove(); });
+}
+
+/* ── Pie ───────────────────────────────────────────────── */
+function renderPie(stocks) {
+  pieChart.data.labels = stocks.map(s => s.symbol.replace(/\.(NS|BO)$/i,''));
+  pieChart.data.datasets[0].data = stocks.map(s => s.current);
+  pieChart.data.datasets[0].backgroundColor = stocks.map((_,i) => PALETTE[i % PALETTE.length]);
+  pieChart.update('none');
+}
+
+/* ── Tabs ──────────────────────────────────────────────── */
+function updateTabs(stocks) {
+  const tabsEl = document.getElementById('chart-tabs');
+  const existing = Array.from(tabsEl.querySelectorAll('.chart-tab')).map(b => b.dataset.sym);
+  stocks.forEach(s => {
+    if (!existing.includes(s.symbol)) {
+      const btn = document.createElement('button');
+      btn.className = 'chart-tab'; btn.dataset.sym = s.symbol;
+      btn.textContent = s.symbol.replace(/\.(NS|BO)$/i,'');
+      btn.addEventListener('click', () => switchChart(s.symbol, btn));
+      tabsEl.appendChild(btn);
+    }
+  });
+  if (lineChart.data.labels.length === 0) loadOverviewChart();
+}
+
+function switchChart(sym, btn) {
+  document.querySelectorAll('.chart-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active'); activeSym = sym;
+  sym === 'ALL' ? loadOverviewChart() : loadStockChart(sym);
+}
+
+async function loadStockChart(sym) {
+  const res  = await fetch('/chart-data/' + sym);
+  const data = await res.json();
+  lineChart.data.labels = data.map(d => d.date);
+  lineChart.data.datasets = [{
+    label: sym.replace(/\.(NS|BO)$/i,'') + ' Close',
+    data: data.map(d => d.close),
+    borderColor: PALETTE[portfolio.findIndex(s => s.symbol === sym) % PALETTE.length],
+    backgroundColor: 'rgba(255,153,51,.07)',
+    fill: true, tension: .4, pointRadius: 0, borderWidth: 2,
+  }];
+  lineChart.update();
+}
+
+function loadOverviewChart() {
+  lineChart.data.labels = portfolio.map(s => s.symbol.replace(/\.(NS|BO)$/i,''));
+  lineChart.data.datasets = [
+    {
+      label: 'Invested', data: portfolio.map(s => s.invested),
+      borderColor: '#8899bb', backgroundColor: 'rgba(136,153,187,.1)',
+      fill: true, tension: .4, pointRadius: 3, borderWidth: 2,
+    },
+    {
+      label: 'Current Value', data: portfolio.map(s => s.current),
+      borderColor: '#FF9933', backgroundColor: 'rgba(255,153,51,.1)',
+      fill: true, tension: .4, pointRadius: 3, borderWidth: 2,
+    }
+  ];
+  lineChart.update();
+}
+
+/* ── AI Insight ────────────────────────────────────────── */
+async function fetchAI(symbol) {
+  const el = document.getElementById('ai-content');
+  el.innerHTML = `<div style="text-align:center;padding:24px 0"><div class="spinner"></div><div style="color:var(--sub);font-size:.8rem">Analysing ${symbol.replace(/\.(NS|BO)$/i,'')}…</div></div>`;
+  try {
+    const data = await (await fetch('/ai-insight/' + symbol)).json();
+    const colors = { BUY:'var(--green2)', SELL:'var(--red)', HOLD:'var(--gold)', NEUTRAL:'var(--sub)', ERROR:'var(--red)' };
+    const c = data.sig_color || colors[data.signal] || 'var(--sub)';
+    el.innerHTML = `
+      <div class="ai-result">
+        <span class="signal-badge" style="background:${c}22;color:${c};border:1px solid ${c}44;">${data.signal}</span>
+        <div class="ai-headline">${data.headline || data.summary || '–'}</div>
+        ${(data.bullets||[]).length ? `<ul class="ai-bullets">${(data.bullets).map(b=>`<li>${b}</li>`).join('')}</ul>` : ''}
+      </div>`;
+  } catch {
+    el.innerHTML = `<div class="ai-idle" style="color:var(--red)">⚠ Failed to load insight.</div>`;
+  }
+}
+
+/* ── Remove ────────────────────────────────────────────── */
+async function removeStock(symbol, event) {
+  event.stopPropagation();
+  const row = event.target.closest('tr');
+  row.classList.add('removing');
+  await new Promise(r => setTimeout(r, 330));
+  try {
+    await fetch('/remove/' + symbol, { method: 'POST' });
+    toast('🗑️', `Removed ${symbol.replace(/\.(NS|BO)$/i,'')}`, 'var(--red)');
+  } catch { toast('⚠️', 'Failed to remove', 'var(--red)'); }
+}
+
+/* ── Toast ─────────────────────────────────────────────── */
+function toast(icon, msg, color) {
+  const wrap = document.getElementById('toast-wrap');
+  const el   = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<span style="color:${color}">${icon}</span> ${msg}`;
+  wrap.appendChild(el);
+  setTimeout(() => { el.style.animation = 'toastOut .3s forwards'; setTimeout(() => el.remove(), 300); }, 3200);
+}
+</script>
+</body>
+</html>
